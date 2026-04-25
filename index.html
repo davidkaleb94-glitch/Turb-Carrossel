@@ -757,28 +757,20 @@ async function generate(){
   const prompt=`Você é um copywriter especialista no estilo litecopy: direto, conversacional, magnético, sem clichê corporativo. Escreva em português brasileiro informal.\n\nASSUNTO: "${topic}"\nQUANTIDADE DE SLIDES: ${slideCount}\nTOM: ${selTone}\n\nGere exatamente ${slideCount} slides. Retorne APENAS JSON válido, sem markdown, sem explicação.\n\nREGRAS:\n- Slide 1 (capa): headline gancho impactante com máx 15 palavras, body vazio\n- Slides intermediários: headline com máx 10 palavras, body com 2 a 3 frases curtas e diretas\n- Último slide: headline de fechamento com CTA natural, body opcional\n- Proibido bullet points, listas, hifens, traços\n- Tom: ${selTone}\n\nFORMATO EXATO:\n{"slides":[{"headline":"...","body":"..."}]}`;
 
   try{
-    let res;
-    try{
-      res=await fetch('/api/claude',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
-      });
-      if(res.status===404) throw new Error('proxy not found');
-    }catch(proxyErr){
-      res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':'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','anthropic-version':'2023-06-01'},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
-      });
-    }
-    if(!res.ok){const err=await res.json().catch(()=>({}));throw new Error(err.error?.message||`HTTP ${res.status}`);}
+    const res=await fetch('/api/claude',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    });
     const data=await res.json();
+    if(data.type==='error')throw new Error(data.error?.message||'Erro da API');
+    if(!res.ok)throw new Error(`HTTP ${res.status}`);
     const raw=data.content?.find(b=>b.type==='text')?.text||'';
+    if(!raw)throw new Error('Resposta vazia da IA');
     const match=raw.match(/\{[\s\S]*\}/);
-    if(!match)throw new Error('Formato inválido');
+    if(!match)throw new Error('Formato inválido: '+raw.slice(0,100));
     const parsed=JSON.parse(match[0]);
-    if(!parsed.slides||!Array.isArray(parsed.slides))throw new Error('JSON inválido');
+    if(!parsed.slides||!Array.isArray(parsed.slides))throw new Error('JSON sem slides');
     parsed.slides.forEach((s,i)=>{slides[i]={...slides[i],headline:s.headline||'',headlineHtml:s.headline||'',body:s.body||'',aiGenerated:true};});
     renderPreview();
     openPanel('slides');
